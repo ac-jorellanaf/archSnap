@@ -1,0 +1,4 @@
+include src/archsnap/data/artefact_scene.blend
+include src/archsnap/data/textures/scale.png
+include src/archsnap/data/icos/icon.ico
+include src/archsnap/config/config.ini

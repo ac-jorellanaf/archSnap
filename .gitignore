@@ -172,3 +172,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Output files
+Output
+
+# Config files
+src/archsnap/config/.config/config.ini

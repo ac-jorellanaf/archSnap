@@ -1,0 +1,36 @@
+[build-system]
+requires = ['setuptools']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'archSnap'
+version = '0.1.0'
+description = 'A package for the archSnap visualisation generator'
+authors = [
+    { name='Jordy Didier Orellana Figueroa' }
+]
+readme = 'README.md'
+requires-python = '>=3.11.3'
+license = 'GPL-3.0-or-later'
+license-files = [
+    'LICENSE',
+]
+classifiers=[
+        'Programming Language :: Python :: 3',
+        'Development Status :: 4 - Beta',
+        'Operating System :: OS Independent',
+        'Topic :: Multimedia :: Graphics :: 3D Rendering',
+]
+dependencies = [
+    'bpy>=4.4.0'
+]
+
+[project.urls]
+Repository = "https://github.com/ac-jorellanaf/archSnap"
+
+[tool.distutils.egg_info]
+egg_base = 'build'
+
+[tool.setuptools.package-data]
+'archsnap.data' = ['*.*']
+'archsnap.config' = ['config.ini']
