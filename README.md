@@ -8,11 +8,11 @@ This tool creates renders of 3D objects (meshes) from all 6 orthogonal direction
 
 Important! Before running this tool, you need to manually install the following:
 - Blender 4.4.x from the [Blender website](https://www.blender.org/download/) ([alternative link](https://download.blender.org/release/Blender4.4/))
-- In order to run the Blender Python module (`bpy==4.4.\*`), you need to install and use [`Python==3.11.\*`](https://www.python.org/downloads/).
+- In order to run the Blender Python module (`bpy>=4.4.0`), you need to install and use [Python 3.11.*](https://www.python.org/downloads/).
 
 ## Installation and usage
 
-### From [PyPI package page]()
+### From [PyPI package page](https://pypi.org/project/archSnap/)
 
 - Installation from PyPI: In a console, run `pip install archsnap` to install the package, and `python -m archsnap` to run the tool.
 
