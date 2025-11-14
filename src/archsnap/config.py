@@ -3,7 +3,7 @@ from importlib.resources import files
 from pathlib import Path as p
 
 # Hardcoded path to the configuration file
-CONFIG_PATH = files('archsnap').joinpath('config/config.ini')
+CONFIG_PATH = files('archsnap').joinpath('.config/config.ini')
 
 def parse_config_file():
     """Parse the configuration file."""

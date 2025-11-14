@@ -173,8 +173,14 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# VS Code files
+.vscode/
+
 # Output files
-Output
+output
 
 # Config files
-src/archsnap/config/.config/config.ini
+src/archsnap/.config/config.ini
+
+# Windows desktop.ini files
+desktop.ini
