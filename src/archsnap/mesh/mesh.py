@@ -2,11 +2,15 @@ import math
 import sys
 from importlib.resources import files
 from pathlib import Path as p
+from typing import cast
+
+from archsnap.custom_types import MeshQueueItem
 
 # Avoiding the issue of importing bpy while multiprocessing
 # as mentioned in https://github.com/TylerGubala/blenderpy/issues/23#issuecomment-514826760
 ORIG_SYS_PATH = list(sys.path)  # nopep8
 import bpy  # nopep8
+
 sys.path = ORIG_SYS_PATH  # nopep8
 
 # TODO: For performance, change the bpy.ops to matrix transformations where applicable
@@ -83,19 +87,19 @@ def get_mesh_args(mesh_path):
     bpy.ops.wm.quit_blender()
 
 
-def render_mesh(mesh_queue):
+def render_mesh(mesh_queue: MeshQueueItem):
     """Render the mesh from a multiprocessing mesh queue object"""
 
     # Get the variables from the mesh queue
-    mesh_path = p(mesh_queue[0])
-    output_path = p(mesh_queue[1])
-    separate_output_directories = mesh_queue[2]
-    use_eevee = mesh_queue[3]
-    render_resolution = mesh_queue[4]
-    object_scale_factor = mesh_queue[5]
-    scalebar_tick_size = float(mesh_queue[6])
-    object_colour = mesh_queue[7]
-    index = mesh_queue[8]
+    mesh_path = p(mesh_queue['mesh_path'])
+    output_path = p(mesh_queue['output_path'])
+    separate_output_directories = mesh_queue['separate_output_directories']
+    use_eevee = mesh_queue['use_eevee']
+    render_resolution = mesh_queue['render_resolution']
+    object_scale_factor = mesh_queue['object_scale_factor']
+    scalebar_tick_size = float(mesh_queue['scalebar_tick_size'])
+    object_colour = mesh_queue['object_colour']
+    index = mesh_queue['index']
 
     # If the user chose to save the renders in separate output directories
     if separate_output_directories:
@@ -229,11 +233,13 @@ def render_mesh(mesh_queue):
 
         # Get the default scalebar tick size for this rescaled object as the largest object dimension
         # and divide it by the 10 ticks in the scalebar
-        default_scalebar_tick_size = (max(obj.dimensions[0:3]) / 10)
+        default_scalebar_tick_size = (
+            max([float(x) for x in obj.dimensions[0:3]]) / 10)
         # Calculate the rescale factor so that the object itself is by default actually only
         # 10 units in size in its largest dimension (the matching of the dimensions and scalebar to
         # the desired sizes will be done via mathematical trickery)
-        rescale_factor = 1/max(obj.dimensions[0:3]) * 10
+        rescale_factor: float = 1/max([float(x)
+                                      for x in obj.dimensions[0:3]]) * 10
         # Apply the rescale factor (the object is now 10 units in its largest dimension)
         obj.scale[0:3] = (rescale_factor, rescale_factor, rescale_factor)
         bpy.ops.object.transform_apply(
@@ -250,7 +256,7 @@ def render_mesh(mesh_queue):
                 rescale_factor, rescale_factor, rescale_factor)
             bpy.ops.object.transform_apply(
                 location=False, scale=True, rotation=False)
-            scalebar_rescale_factor = 1
+            scalebar_rescale_factor = 1.0
         # If the desired scalebar tick size is smaller than the calculated default size
         else:
             # The rescale factor is now the desired tick size divided by the default scalebar tick size
@@ -268,7 +274,7 @@ def render_mesh(mesh_queue):
             5.58/scalebar_rescale_factor
 
         # We prepare the label text (the size of each scalebar tick) that accompanies the scalebar
-        label_text = round(scalebar_tick_size) if scalebar_tick_size.is_integer(
+        label_tick_size = round(scalebar_tick_size) if scalebar_tick_size.is_integer(
         ) else round(scalebar_tick_size, 4)
 
         # We store all the label and stroke objects of the scene into the labels variable
@@ -277,7 +283,7 @@ def render_mesh(mesh_queue):
         # Then iterate through it
         for x in labels:
             # We make the label object text bodies be the same
-            x.data.body = f'{label_text} cm'
+            x.data.body = f'{label_tick_size} cm'
             # And if they are the labels from the bottom sscale
             if ' Bottom' in x.name:
                 # We position them correctly
@@ -292,8 +298,8 @@ def render_mesh(mesh_queue):
         # so we iterate through the entire colour code (from pos 0 to 8, in steps of 2)
         # convert the hex to a decimal number (int(object_colour[i:i+2], 16)),
         # and divide by 255 to obtain the decimal RGBA
-        colour_tuple = tuple(
-            int(object_colour[i:i+2], 16)/255 for i in range(0, 8, 2))
+        colour_tuple = cast(tuple[float, float, float, float], tuple(
+            int(object_colour[i:i+2], 16)/255 for i in range(0, 8, 2)))
         # We have already prepared a material in the scene, so we simply assign the colour tuple to the
         # Principled BSDF diffuse colour value
         bpy.data.materials['ArtefactMaterial'].node_tree.nodes['Principled BSDF'].inputs[0].default_value = colour_tuple
@@ -307,7 +313,7 @@ def render_mesh(mesh_queue):
             bpy.context.scene.frame_set(frame=i)
             # Set the render path of the png file for this frame
             render_path = p(
-                output_path / f'{mesh_path.name.replace(".","_")}_render_{i}_tick_length_{str(label_text).replace(".","-")}cm.png')
+                output_path / f'{mesh_path.name.replace(".","_")}_render_{i}_tick_length_{str(label_tick_size).replace(".","-")}cm.png')
             # Render the scene, and save to the stored path
             bpy.ops.render.render()
             bpy.data.images['Render Result'].save_render(

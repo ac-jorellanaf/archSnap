@@ -5,9 +5,13 @@ from functools import partial
 from importlib.resources import files
 from multiprocessing import Pool
 from pathlib import Path as p
-from tkinter import colorchooser, ttk
+from tkinter import colorchooser, messagebox, ttk
 from tkinter.filedialog import askdirectory, askopenfilename
+from typing import Literal, cast
 
+from archsnap.custom_types import (ColourVars, ConfigValues, MeshQueueItem,
+                                   OutputVars, RenderResolutionVars, SizeVar,
+                                   SizeVarsDict)
 from archsnap.mesh import get_mesh_args, render_mesh
 
 
@@ -22,23 +26,23 @@ def button_state_validation():
     ) != '' for x in inputs_frame.winfo_children()]) and add_file_button['state'] and len(inputs_frame.winfo_children()) > 0 else tk.DISABLED
 
 
-def _handle_render(inputs_frame, output_frame):
+def _handle_render(inputs_frame, outputs_frame) -> None:
     """Wrapper for the multiprocessed rendering functionality"""
 
     # Set up the work queue for multiprocessing the rendering across various instances of blender
     # and populate it from all the entries in the inputs frame as a list of parameters of shape:
     # mesh file path, output directory, use separate directories boolean, use eevee renderer boolean,
     # render resolution, calculated mesh scale factor, current scalebar tick size, mesh colour and index
-    mesh_queue = [
-        (x.entry_text.get(),
-         output_frame.output_path.get(),
-         output_frame.separate_output_directories_vars['current'].get(),
-         output_frame.use_eevee_vars['current'].get(),
-         output_frame.render_resolution_vars['current'].get(),
-         x.mesh_scale_factor.get(),
-         x.current_sizes['scalebar_tick'].get(),
-         x.mesh_colour_vars['current'].get(),
-         idx)
+    mesh_queue: list[MeshQueueItem] = [
+        {'mesh_path': x.entry_text.get(),
+         'output_path': outputs_frame.output_path.get(),
+         'separate_output_directories': outputs_frame.separate_output_directories_vars['current'].get(),
+         'use_eevee': outputs_frame.use_eevee_vars['current'].get(),
+         'render_resolution': outputs_frame.render_resolution_vars['current'].get(),
+         'object_scale_factor': x.mesh_scale_factor.get(),
+         'scalebar_tick_size': x.current_sizes['scalebar_tick'].get(),
+         'object_colour': x.mesh_colour_vars['current'].get(),
+         'index': idx}
         for idx, x in enumerate(inputs_frame.winfo_children())]
 
     # Create a pool of len(mesh_queue) processes to run blender instances for each mesh
@@ -51,20 +55,22 @@ def _handle_render(inputs_frame, output_frame):
         pool.join()
         # When the workers completed their tasks, show the user a messagebox
         # to ask if they want to open the output directory or not
-        open_output = tk.messagebox.askyesno(
+        open_output = messagebox.askyesno(
             'Image generation complete', 'Image generation was successfully completed!\n\nOpen the output directory?')
         # If they said yes to opening the output directory, do so
         if open_output:
-            webbrowser.open(str(p(output_frame.output_path.get()).absolute()))
+            webbrowser.open(str(p(outputs_frame.output_path.get()).absolute()))
 
 
 class _ConfigMeshModal(tk.Toplevel):
     """Modal for the configuration of mesh render settings"""
 
-    def __init__(self, entry_text, size_vars, mesh_colour_vars, mesh_scale_factor, scalebar_scale_factor):
+    def __init__(self, entry_text: tk.StringVar, size_vars: SizeVarsDict,
+                 mesh_colour_vars: ColourVars, mesh_scale_factor: tk.DoubleVar,
+                 scalebar_scale_factor: tk.DoubleVar):
         """Initialise the modal for the individual mesh rendering configuration"""
         # Initiate the TopLevel as a child of the top tk.Tk()
-        super().__init__(main_window)
+        super().__init__(MAIN_WINDOW)
 
         # Set the modal title
         self.title(
@@ -77,7 +83,8 @@ class _ConfigMeshModal(tk.Toplevel):
 
         # Create the instance size variables from the provided parameters, sent as an array of
         # initial, current, and previous size dictionaries of StringVars
-        [self.initial_sizes, self.current_sizes, self.previous_sizes] = size_vars
+        self.initial_sizes, self.current_sizes, self.previous_sizes = size_vars[
+            'initial'], size_vars['current'], size_vars['previous']
         # Get the remaining parameters as instance variables
         self.mesh_colour_vars, self.mesh_scale_factor, self.scalebar_scale_factor = \
             mesh_colour_vars, mesh_scale_factor, scalebar_scale_factor
@@ -93,14 +100,12 @@ class _ConfigMeshModal(tk.Toplevel):
 
         # If the file path was somehow made invalid before opening the modal, exit
         if not file_path.is_file():
-            tk.messagebox.showerror('Error', 'File does not exist!')
+            messagebox.showerror('Error', 'File does not exist!')
             self.destroy()
-            return 404
         if not file_path.suffix in ['.ply', '.obj', '.stl', '.dae']:
-            tk.messagebox.showerror(
+            messagebox.showerror(
                 'Error', 'File type not supported!')
             self.destroy()
-            return 406
 
         # Create the main frame of the modal and add it to the grid
         config_mesh_modal_main_frame = self._ConfigMeshModalMainFrame(
@@ -264,7 +269,7 @@ class _ConfigMeshModal(tk.Toplevel):
                 buttons_frame, text='Save', command=container._handle_save)
             save_button.grid(column=2, row=0)
 
-    def _handle_mesh_size_change(self, _, dimension):
+    def _handle_mesh_size_change(self, _, dimension: Literal[0, 1, 2]):
         """Handle the change of the mesh size through the entry widgets"""
         # TODO: Block non-numeric input
 
@@ -355,6 +360,7 @@ class _ConfigMeshModal(tk.Toplevel):
                 float(scalebar_tick_size) / float(self.initial_sizes['scalebar_tick'].get()))
             # Call the method to set the value of the StringVar to display the total scalebar size
             self._set_total_scalebar_size()
+            return 200
         else:
             # If it is 0, return without doing anything
             return 416
@@ -366,8 +372,10 @@ class _ConfigMeshModal(tk.Toplevel):
         # Local variables to improve readability
         colour = self.mesh_colour_vars['current'].get()
         config_mesh_modal_main_frame = self.winfo_children()[0]
-        colour_picker_entry = config_mesh_modal_main_frame.colour_picker_entry
-        colour_error_label = config_mesh_modal_main_frame.colour_error_label
+        colour_picker_entry = cast(
+            tk.Entry, config_mesh_modal_main_frame.colour_picker_entry)
+        colour_error_label = cast(
+            tk.Label, config_mesh_modal_main_frame.colour_error_label)
 
         # If the colour is not an empty string and begins with a hash symbol
         # like a well-formed hex colour code should
@@ -447,8 +455,8 @@ class _ConfigMeshModal(tk.Toplevel):
         # If there were any changes
         if changed:
             # Ask the user for confirmation for resetting to initial values
-            confirm = tk.messagebox.askyesno('Reset to initial values?',
-                                             'Are you sure you want to reset all parameters to their initial values?')
+            confirm = messagebox.askyesno('Reset to initial values?',
+                                          'Are you sure you want to reset all parameters to their initial values?')
 
             # If the user did not confirm, exit without changing
             if not confirm:
@@ -476,8 +484,10 @@ class _ConfigMeshModal(tk.Toplevel):
             self._set_scale_factors()
 
         # Show a confirmation that the initial values were restored
-        tk.messagebox.showinfo(
+        messagebox.showinfo(
             'Initial values', 'Parameters set to their initial values.')
+
+        return 200
 
     def _handle_cancel(self):
         """Exit the modal without making any changes after confirmation"""
@@ -488,8 +498,8 @@ class _ConfigMeshModal(tk.Toplevel):
 
         if changed:
             # If there were changes, ask the user to confirm they want to discard them
-            confirm = tk.messagebox.askyesno('Discard changes?',
-                                             'Are you sure you want to discard your changes?')
+            confirm = messagebox.askyesno('Discard changes?',
+                                          'Are you sure you want to discard your changes?')
             # If the user did not confirm, exit the method without discarding
             if not confirm:
                 return 304
@@ -532,33 +542,33 @@ class _ConfigMeshModal(tk.Toplevel):
 class _NewInputMesh(ttk.Frame):
     """Frame for a new input mesh to render"""
 
-    def __init__(self, container, first=False, file_path=None):
+    def __init__(self, container, file_path=None):
         """Initialise the new input mesh frame"""
         super().__init__(container)
 
         # Set the initial size instance variables as empty tk.StringVars
-        self.initial_sizes = {
+        self.initial_sizes: SizeVar = {
             'x': tk.StringVar(),
             'y': tk.StringVar(),
             'z': tk.StringVar(),
             'scalebar_tick': tk.StringVar()
         }
         # Set the currently set size instance variables as empty tk.StringVars
-        self.current_sizes = {
+        self.current_sizes: SizeVar = {
             'x': tk.StringVar(),
             'y': tk.StringVar(),
             'z': tk.StringVar(),
             'scalebar_tick': tk.StringVar()
         }
         # Set the previously set (i.e. before any current edits) size instance variables as empty tk.StringVars
-        self.previous_sizes = {
+        self.previous_sizes: SizeVar = {
             'x': tk.StringVar(),
             'y': tk.StringVar(),
             'z': tk.StringVar(),
             'scalebar_tick': tk.StringVar()
         }
 
-        self.mesh_colour_vars = {
+        self.mesh_colour_vars: ColourVars = {
             'initial': tk.StringVar(),
             'current': tk.StringVar(),
             'previous': tk.StringVar()
@@ -584,7 +594,7 @@ class _NewInputMesh(ttk.Frame):
         # Create the button to open the configuration modal as an instance variable
         self.configure_button = ttk.Button(
             self, text='⚙️',
-            command=partial(_ConfigMeshModal, self.entry_text, [self.initial_sizes, self.current_sizes, self.previous_sizes],
+            command=partial(_ConfigMeshModal, self.entry_text, {'initial': self.initial_sizes, 'current': self.current_sizes, 'previous': self.previous_sizes},
                             self.mesh_colour_vars, self.mesh_scale_factor, self.scalebar_scale_factor)
         )
         self.configure_button.configure(width=3)
@@ -871,10 +881,10 @@ def _select_output(self, entry):
 class _ConfigOutputModal(tk.Toplevel):
     """Modal for the configuration of render output settings"""
 
-    def __init__(self, output_frame):
+    def __init__(self, outputs_frame):
         """Initialise the modal for the render output configuration"""
         # Initiate the TopLevel as a child of the top tk.Tk()
-        super().__init__(main_window)
+        super().__init__(MAIN_WINDOW)
 
         # Set the modal title
         self.title('Configure output settings')
@@ -906,7 +916,7 @@ class _ConfigOutputModal(tk.Toplevel):
         separate_dirs_label.grid(column=0, row=0, sticky='w')
         # Create the checkbox for the option and add it to the grid
         separate_dirs_checkbox = ttk.Checkbutton(
-            options_frame, variable=output_frame.separate_output_directories_vars['current'], onvalue=1, offvalue=0)
+            options_frame, variable=outputs_frame.separate_output_directories_vars['current'], onvalue=1, offvalue=0)
         separate_dirs_checkbox.grid(column=0, row=0, sticky='')
 
         # Option to select if EEVEE should be used as the renderer or not
@@ -916,7 +926,7 @@ class _ConfigOutputModal(tk.Toplevel):
         use_eevee_label.grid(column=0, row=1, sticky='w')
         # Create the checkbox for the option and add it to the grid
         use_eevee_checkbox = ttk.Checkbutton(
-            options_frame, variable=output_frame.use_eevee_vars['current'], onvalue=1, offvalue=0)
+            options_frame, variable=outputs_frame.use_eevee_vars['current'], onvalue=1, offvalue=0)
         use_eevee_checkbox.grid(column=0, row=1, sticky='')
 
         # Option to specify the render resolution
@@ -926,7 +936,7 @@ class _ConfigOutputModal(tk.Toplevel):
         render_resolution_label.grid(column=0, row=2, sticky='w')
         # Create the entry widget for the option and add it to the grid
         render_resolution_entry = ttk.Entry(
-            options_frame, textvariable=output_frame.render_resolution_vars['current'], justify='center')
+            options_frame, textvariable=outputs_frame.render_resolution_vars['current'], justify='center')
         render_resolution_entry.grid(column=0, row=2, sticky='')
         render_resolution_entry.configure(width=7)
 
@@ -943,25 +953,28 @@ class _ConfigOutputModal(tk.Toplevel):
 
         # Create the button to restore factory default values and add it to the grid
         defaults_button = ttk.Button(
-            buttons_frame, text='Factory defaults', command=partial(self._handle_factory_defaults, output_frame))
+            buttons_frame, text='Factory defaults', command=partial(self._handle_factory_defaults, outputs_frame))
         defaults_button.grid(column=0, row=0, sticky='w')
 
         # Create the button to cancel the changes and add it to the grid
         cancel_button = ttk.Button(
-            buttons_frame, text='Cancel', command=partial(self._handle_cancel, output_frame))
+            buttons_frame, text='Cancel', command=partial(self._handle_cancel, outputs_frame))
         cancel_button.grid(column=1, row=0, sticky='e')
 
         # Create the button to save the changes and add it to the grid
         save_button = ttk.Button(
-            buttons_frame, text='Save', command=partial(self._handle_save, output_frame))
+            buttons_frame, text='Save', command=partial(self._handle_save, outputs_frame))
         save_button.grid(column=2, row=0)
 
     def _handle_factory_defaults(self, output_frame):
         """Handle a reset to factory defaults"""
         # Local variables to improve readability
-        separate_output_directories_vars = output_frame.separate_output_directories_vars
-        use_eevee_vars = output_frame.use_eevee_vars
-        render_resolution_vars = output_frame.render_resolution_vars
+        separate_output_directories_vars = cast(
+            OutputVars, output_frame.separate_output_directories_vars)
+        use_eevee_vars = cast(
+            OutputVars, output_frame.use_eevee_vars)
+        render_resolution_vars = cast(
+            OutputVars, output_frame.render_resolution_vars)
 
         # Check if there were any changes made in the parameters compared to their factory defaults
         changed = any([var['current'].get() != var['default'].get() or var['previous'].get() != var['default'].get() for var
@@ -970,8 +983,8 @@ class _ConfigOutputModal(tk.Toplevel):
         # If there were any changes
         if changed:
             # Ask the user for confirmation for resetting to factory defaults
-            confirm = tk.messagebox.askyesno('Reset to factory defaults?',
-                                             'Are you sure you want to reset all parameters to their factory defaults?')
+            confirm = messagebox.askyesno('Reset to factory defaults?',
+                                          'Are you sure you want to reset all parameters to their factory defaults?')
 
             # If the user did not confirm, exit without changing
             if not confirm:
@@ -985,15 +998,18 @@ class _ConfigOutputModal(tk.Toplevel):
                 DEFAULT_VALUES['render_resolution'])
 
         # Show a confirmation that the initial values were restored
-        tk.messagebox.showinfo(
+        messagebox.showinfo(
             'Defaults', 'Default settings have been restored.')
 
     def _handle_cancel(self, output_frame):
         """Exit the modal without making any changes after confirmation"""
         # Local variables to improve readability
-        separate_output_directories_vars = output_frame.separate_output_directories_vars
-        use_eevee_vars = output_frame.use_eevee_vars
-        render_resolution_vars = output_frame.render_resolution_vars
+        separate_output_directories_vars = cast(
+            OutputVars, output_frame.separate_output_directories_vars)
+        use_eevee_vars = cast(
+            OutputVars, output_frame.use_eevee_vars)
+        render_resolution_vars = cast(
+            OutputVars, output_frame.render_resolution_vars)
 
         # Check if there were any changes made in the parameters compared to the previous values
         changed = any([var['current'].get() != var['default'].get() or var['previous'].get() != var['default'].get() for var
@@ -1001,8 +1017,8 @@ class _ConfigOutputModal(tk.Toplevel):
 
         if changed:
             # If there were changes, ask the user to confirm they want to discard them
-            confirm = tk.messagebox.askyesno('Discard changes?',
-                                             'Are you sure you want to discard your changes?')
+            confirm = messagebox.askyesno('Discard changes?',
+                                          'Are you sure you want to discard your changes?')
             # If the user did not confirm, exit the method without discarding
             if not confirm:
                 return 304
@@ -1018,12 +1034,15 @@ class _ConfigOutputModal(tk.Toplevel):
         # Close the modal
         self.destroy()
 
-    def _handle_save(self, output_frame):
+    def _handle_save(self, outputs_frame):
         """Save the changed parameters"""
         # Local variables to improve readability
-        separate_output_directories_vars = output_frame.separate_output_directories_vars
-        use_eevee_vars = output_frame.use_eevee_vars
-        render_resolution_vars = output_frame.render_resolution_vars
+        separate_output_directories_vars = cast(
+            OutputVars, outputs_frame.separate_output_directories_vars)
+        use_eevee_vars = cast(
+            OutputVars, outputs_frame.use_eevee_vars)
+        render_resolution_vars = cast(
+            OutputVars, outputs_frame.render_resolution_vars)
 
         # Since the current values are stored in tk.StringVars, there's no need to do anything,
         # just set the 'previous' set of parameters to the current values so the cancel button
@@ -1041,7 +1060,7 @@ class _ConfigOutputModal(tk.Toplevel):
 class _OutputsFrame(ttk.Frame):
     """Frame for the output options frame"""
 
-    def __init__(self, container):
+    def __init__(self, container) -> None:
         """Initialise the outputs frame"""
         super().__init__(container)
 
@@ -1051,17 +1070,17 @@ class _OutputsFrame(ttk.Frame):
         self.columnconfigure(2, weight=0)
 
         # Set up the tkinter variables for the output settings as instance variables
-        self.separate_output_directories_vars = {
+        self.separate_output_directories_vars: OutputVars = {
             'default': tk.BooleanVar(value=DEFAULT_VALUES['separate_output_directories']),
             'current': tk.BooleanVar(value=CONFIG_VALUES['separate_output_directories']),
             'previous': tk.BooleanVar(value=CONFIG_VALUES['separate_output_directories']),
         }
-        self.use_eevee_vars = {
+        self.use_eevee_vars: OutputVars = {
             'default': tk.BooleanVar(value=DEFAULT_VALUES['use_eevee']),
             'current': tk.BooleanVar(value=CONFIG_VALUES['use_eevee']),
             'previous': tk.BooleanVar(value=CONFIG_VALUES['use_eevee']),
         }
-        self.render_resolution_vars = {
+        self.render_resolution_vars: RenderResolutionVars = {
             'default': tk.IntVar(value=DEFAULT_VALUES['render_resolution']),
             'current': tk.IntVar(value=CONFIG_VALUES['render_resolution']),
             'previous': tk.IntVar(value=CONFIG_VALUES['render_resolution']),
@@ -1156,11 +1175,12 @@ class _App(tk.Tk):
 
 
 # Set up the global variables for the config values and default values
-CONFIG_VALUES = None
-DEFAULT_VALUES = None
+CONFIG_VALUES: ConfigValues
+DEFAULT_VALUES: ConfigValues
+MAIN_WINDOW: _App
 
 
-def init_gui(config_values, default_values):
+def init_gui(config_values: ConfigValues, default_values: ConfigValues):
     """Initialise the GUI for ArchSnap"""
 
     # Declare the config values and default values as global variables
@@ -1170,8 +1190,8 @@ def init_gui(config_values, default_values):
     DEFAULT_VALUES = default_values
 
     # Declare the root as main variable (for modals dialogs to use as parent)
-    global main_window
+    global MAIN_WINDOW
     # Create a new root window
-    main_window = _App()
+    MAIN_WINDOW = _App()
     # Run the Tkinter main loop
-    main_window.mainloop()
+    MAIN_WINDOW.mainloop()

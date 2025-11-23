@@ -2,17 +2,23 @@ import configparser
 from importlib.resources import files
 from pathlib import Path as p
 
+from .custom_types import ConfigValues
+
 # Hardcoded path to the configuration file
 CONFIG_PATH = files('archsnap').joinpath('.config/config.ini')
 
-def parse_config_file():
+
+def parse_config_file() -> tuple[ConfigValues, ConfigValues]:
     """Parse the configuration file."""
 
-    ## Default values
+    # Default values
+    #
     # Default output path for the renders should be in the 'output' directory
-    # in the project root two levels up from the current file location (src/archSnap)
+    # in the project root. If the user is running this module locally, then
+    # the CWD would be in ROOT/src, so we check if this is the case and adjust
+    # the output path accordingly.
     RENDER_OUTPUT_PATH = p(
-        p.cwd().absolute() / 'output')
+        p.cwd().absolute() / 'output' if p.cwd().parts[-1] != 'src' else p.cwd().absolute().parent / 'output')
     # Default render resolution of 1920x1920
     RENDER_RESOLUTION = 1920
     # Use the faster EEVEE rendering engine by default
@@ -23,7 +29,7 @@ def parse_config_file():
     DEFAULT_OBJECT_COLOUR = '#808080'
 
     # Create a dictionary for the 'factory settings'
-    default_values = {
+    default_values: ConfigValues = {
         'render_output_path': RENDER_OUTPUT_PATH,
         'render_resolution': RENDER_RESOLUTION,
         'use_eevee': USE_EEVEE,
@@ -33,15 +39,15 @@ def parse_config_file():
 
     # Pre-populate the configuration values with the default values
     # in case the config file does not exist or cannot be read
-    config_values = default_values.copy()
+    config_values: ConfigValues = default_values.copy()
 
     # Check if the configuration file exists
-    if (CONFIG_PATH).exists():
+    if CONFIG_PATH.is_file():
         # If it exists, try to read its values
         try:
             # Read the configuration file contents
             config = configparser.ConfigParser()
-            config.read(CONFIG_PATH)
+            config.read(str(CONFIG_PATH))
 
             # Get the output path as an absolute Path object
             RENDER_OUTPUT_PATH = p(config.get(
@@ -61,8 +67,9 @@ def parse_config_file():
 
         # Except any errors when reading the file
         except configparser.Error as e:
-            print(f'Error reading config file: {e}')
-            return None
+            print(
+                f'Error reading config file: {e}\nContinuing with default values.')
+            return default_values, default_values
 
         # Create a dictionary for the saved configuration values
         config_values = {
