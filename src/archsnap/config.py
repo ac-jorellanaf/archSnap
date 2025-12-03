@@ -1,40 +1,45 @@
+"""Module to parse the configuration of the program."""
+
 import configparser
+import logging
 from importlib.resources import files
-from pathlib import Path as p
+from pathlib import Path
 
 from .custom_types import ConfigValues
 
 # Hardcoded path to the configuration file
-CONFIG_PATH = files('archsnap').joinpath('.config/config.ini')
+CONFIG_PATH = files("archsnap").joinpath(".config/config.ini")
 
 
 def parse_config_file() -> tuple[ConfigValues, ConfigValues]:
     """Parse the configuration file."""
-
     # Default values
     #
     # Default output path for the renders should be in the 'output' directory
     # in the project root. If the user is running this module locally, then
     # the CWD would be in ROOT/src, so we check if this is the case and adjust
     # the output path accordingly.
-    RENDER_OUTPUT_PATH = p(
-        p.cwd().absolute() / 'output' if p.cwd().parts[-1] != 'src' else p.cwd().absolute().parent / 'output')
+    render_output_path = Path(
+        Path.cwd().absolute() / "output"
+        if Path.cwd().parts[-1] != "src"
+        else Path.cwd().absolute().parent / "output",
+    )
     # Default render resolution of 1920x1920
-    RENDER_RESOLUTION = 1920
+    render_resolution = 1920
     # Use the faster EEVEE rendering engine by default
-    USE_EEVEE = True
+    use_eevee = True
     # By default save each object's renders in a separate directory
-    SEPARATE_OUTPUT_DIRECTORIES = True
+    separate_output_directories = True
     # Default object colour for the render
-    DEFAULT_OBJECT_COLOUR = '#808080'
+    default_object_colour = "#808080"
 
     # Create a dictionary for the 'factory settings'
     default_values: ConfigValues = {
-        'render_output_path': RENDER_OUTPUT_PATH,
-        'render_resolution': RENDER_RESOLUTION,
-        'use_eevee': USE_EEVEE,
-        'separate_output_directories': SEPARATE_OUTPUT_DIRECTORIES,
-        'default_object_colour': DEFAULT_OBJECT_COLOUR,
+        "render_output_path": render_output_path,
+        "render_resolution": render_resolution,
+        "use_eevee": use_eevee,
+        "separate_output_directories": separate_output_directories,
+        "default_object_colour": default_object_colour,
     }
 
     # Pre-populate the configuration values with the default values
@@ -50,34 +55,55 @@ def parse_config_file() -> tuple[ConfigValues, ConfigValues]:
             config.read(str(CONFIG_PATH))
 
             # Get the output path as an absolute Path object
-            RENDER_OUTPUT_PATH = p(config.get(
-                'render', 'output_path', fallback=RENDER_OUTPUT_PATH)).absolute()
+            render_output_path = Path(
+                config.get(
+                    "render",
+                    "output_path",
+                    fallback=render_output_path,
+                ),
+            ).absolute()
             # Get the render resolution as an integer
-            RENDER_RESOLUTION = config.getint(
-                'render', 'resolution', fallback=RENDER_RESOLUTION)
+            render_resolution = config.getint(
+                "render",
+                "resolution",
+                fallback=render_resolution,
+            )
             # Get whether to use the EEVEE rendering engine as a boolean
-            USE_EEVEE = config.getboolean(
-                'render', 'use_eevee', fallback=USE_EEVEE)
-            # Get whether to save each object's renders in a separate directory as a boolean
-            SEPARATE_OUTPUT_DIRECTORIES = config.getboolean(
-                'render', 'separate_output_directories', fallback=SEPARATE_OUTPUT_DIRECTORIES)
+            use_eevee = config.getboolean(
+                "render",
+                "use_eevee",
+                fallback=use_eevee,
+            )
+            # Get whether to save each object's renders in a separate directory
+            # as a boolean
+            separate_output_directories = config.getboolean(
+                "render",
+                "separate_output_directories",
+                fallback=separate_output_directories,
+            )
             # Get the default object colour as a string
-            DEFAULT_OBJECT_COLOUR = config.get(
-                'object', 'default_object_colour', fallback=DEFAULT_OBJECT_COLOUR)
+            default_object_colour = config.get(
+                "object",
+                "default_object_colour",
+                fallback=default_object_colour,
+            )
 
         # Except any errors when reading the file
         except configparser.Error as e:
-            print(
-                f'Error reading config file: {e}\nContinuing with default values.')
+            logger = logging.getLogger(__name__)
+            logger.exception(
+                "Error reading config file.",
+                extra=f"{e}\nContinuing with default configuration.",
+            )
             return default_values, default_values
 
         # Create a dictionary for the saved configuration values
         config_values = {
-            'render_output_path': RENDER_OUTPUT_PATH,
-            'render_resolution': RENDER_RESOLUTION,
-            'use_eevee': USE_EEVEE,
-            'separate_output_directories': SEPARATE_OUTPUT_DIRECTORIES,
-            'default_object_colour': DEFAULT_OBJECT_COLOUR,
+            "render_output_path": render_output_path,
+            "render_resolution": render_resolution,
+            "use_eevee": use_eevee,
+            "separate_output_directories": separate_output_directories,
+            "default_object_colour": default_object_colour,
         }
 
     # Return the saved and default configuration values
